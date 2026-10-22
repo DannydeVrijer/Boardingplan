@@ -20,7 +20,9 @@
 body { margin: 0; }
 button, input, select { font: inherit; color: inherit; }
 
-.app { display: flex; flex-direction: column; height: 100vh; }
+html, body, #root { height: 100%; }
+body { background: var(--bg); }
+.app { display: flex; flex-direction: column; height: 100%; }
 .app.dragging, .app.dragging * { cursor: grabbing !important; user-select: none; }
 
 .toolbar {
@@ -97,3 +99,9 @@ label.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
   .layout { grid-template-columns: 1fr; }
   .side { border-left: none; border-top: 1px solid var(--line); }
 }
+
+.backdrop { position: fixed; inset: 0; background: rgba(20, 26, 46, 0.35); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.dialog { background: var(--panel); border-radius: 14px; padding: 18px; width: min(420px, 100%); display: flex; flex-direction: column; gap: 12px; box-shadow: 0 12px 40px rgba(20, 26, 46, 0.25); }
+.dialog p { margin: 0; font-size: 15px; line-height: 1.45; }
+button.danger { background: var(--danger); color: #fff; border-color: var(--danger); font-weight: 600; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }

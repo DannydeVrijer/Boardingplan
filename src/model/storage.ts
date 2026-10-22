@@ -18,7 +18,7 @@ export function newProject(name = 'Nieuw event'): Project {
   };
 }
 
-export function loadProjects(): { projects: Project[]; currentId: string } {
+export function loadProjects(firstRun: () => Project = () => newProject()): { projects: Project[]; currentId: string } {
   try {
     const raw = localStorage.getItem(KEY);
     const projects: Project[] = raw ? JSON.parse(raw) : [];
@@ -29,7 +29,7 @@ export function loadProjects(): { projects: Project[]; currentId: string } {
   } catch {
     /* lege of geblokkeerde opslag */
   }
-  const p = newProject();
+  const p = firstRun();
   return { projects: [p], currentId: p.id };
 }
 

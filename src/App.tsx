@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PartnerRow } from './components/PartnerRow';
 import { TrackView, type ViewMode } from './components/TrackView';
+import { demoProject } from './model/demo';
 import { exportPdf, exportPng } from './model/exporter';
 import { TEMPLATE_CSV, readPartnerFile } from './model/importer';
 import { KNSB_PARTNERS, KNSB_SEASON } from './model/knsb';
@@ -10,6 +11,8 @@ import { POSITIONS, sideOf } from './model/track';
 import type { Partner, Project } from './model/types';
 import { downloadBlob, textOn, uid } from './model/util';
 import { defaultValue, valueMap } from './model/value';
+
+type Dialog = { text: string; okLabel: string; danger?: boolean; input?: string; onOk: (value: string) => void };
 
 type Drag =
   | { kind: 'partner'; partnerId: string; x: number; y: number; started: boolean; sx: number; sy: number }
@@ -28,7 +31,7 @@ function posFromPoint(x: number, y: number): number | null {
 }
 
 export default function App() {
-  const initial = useMemo(loadProjects, []);
+  const initial = useMemo(() => loadProjects(demoProject), []);
   const [projects, setProjects] = useState<Project[]>(initial.projects);
   const [currentId, setCurrentId] = useState(initial.currentId);
   const [history, setHistory] = useState<Project[]>([]);
@@ -39,6 +42,9 @@ export default function App() {
   const [highlight, setHighlight] = useState<string | null>(null);
   const [messages, setMessages] = useState<string[]>([]);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const ask = (text: string, okLabel: string, onOk: (value: string) => void, opts: Partial<Dialog> = {}) =>
+    setDialog({ text, okLabel, onOk, ...opts });
   const svgRef = useRef<SVGSVGElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
@@ -99,11 +105,12 @@ export default function App() {
 
   const deletePartner = (id: string) => {
     const partner = project.partners.find((x) => x.id === id);
-    if (!partner || !confirm(`${partner.name} verwijderen? Alle borden van deze partner worden leeggemaakt.`)) return;
-    update((p) => {
-      const assignment = Object.fromEntries(Object.entries(p.assignment).filter(([, v]) => v !== id));
-      return { ...p, partners: p.partners.filter((x) => x.id !== id), assignment };
-    });
+    if (!partner) return;
+    ask(`${partner.name} verwijderen? Alle borden van deze partner worden leeggemaakt.`, 'Verwijderen', () =>
+      update((p) => {
+        const assignment = Object.fromEntries(Object.entries(p.assignment).filter(([, v]) => v !== id));
+        return { ...p, partners: p.partners.filter((x) => x.id !== id), assignment };
+      }), { danger: true });
   };
 
   const addPartner = () =>
@@ -136,7 +143,14 @@ export default function App() {
 
   const runProposal = () => {
     const unlockedFilled = POSITIONS.filter((pos) => project.assignment[pos] && !project.locked.includes(pos)).length;
-    if (unlockedFilled > 0 && !confirm(`Nieuw voorstel maken? ${unlockedFilled} niet-vastgezette borden worden opnieuw verdeeld.`)) return;
+    if (unlockedFilled > 0) {
+      ask(`Nieuw voorstel maken? ${unlockedFilled} niet-vastgezette borden worden opnieuw verdeeld.`, 'Maak voorstel', applyProposal);
+      return;
+    }
+    applyProposal();
+  };
+
+  const applyProposal = () => {
     const res = propose(project);
     update((p) => ({ ...p, assignment: res.assignment }));
     const msgs: string[] = [];
@@ -148,8 +162,8 @@ export default function App() {
   };
 
   const clearUnlocked = () => {
-    if (!confirm('Alle niet-vastgezette borden leegmaken?')) return;
-    update((p) => ({ ...p, assignment: Object.fromEntries(Object.entries(p.assignment).filter(([pos]) => p.locked.includes(Number(pos)))) }));
+    ask('Alle niet-vastgezette borden leegmaken?', 'Leegmaken', () =>
+      update((p) => ({ ...p, assignment: Object.fromEntries(Object.entries(p.assignment).filter(([pos]) => p.locked.includes(Number(pos)))) })), { danger: true });
   };
 
   const importFile = async (file: File) => {
@@ -293,10 +307,10 @@ export default function App() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <button onClick={() => { const n = prompt('Naam van het event', 'Nieuw event'); if (!n) return; const p = newProject(n); setProjects((a) => [...a, p]); setCurrentId(p.id); setHistory([]); }}>
+        <button onClick={() => ask('Naam van het nieuwe event', 'Aanmaken', (n) => { if (!n.trim()) return; const p = newProject(n.trim()); setProjects((a) => [...a, p]); setCurrentId(p.id); setHistory([]); }, { input: 'Nieuw event' })}>
           + Event
         </button>
-        <button onClick={() => { const n = prompt('Nieuwe naam', project.name); if (n) update((p) => ({ ...p, name: n })); }}>Hernoem</button>
+        <button onClick={() => ask('Nieuwe naam voor dit event', 'Opslaan', (n) => { if (n.trim()) update((p) => ({ ...p, name: n.trim() })); }, { input: project.name })}>Hernoem</button>
         <button onClick={() => {
           const copy = { ...structuredClone(project), id: uid(), name: `${project.name} (kopie)` };
           setProjects((a) => [...a, copy]); setCurrentId(copy.id); setHistory([]);
@@ -455,9 +469,10 @@ export default function App() {
               }} />
               {projects.length > 1 && (
                 <button className="link danger" onClick={() => {
-                  if (!confirm(`Event "${project.name}" verwijderen?`)) return;
-                  const rest = projects.filter((p) => p.id !== project.id);
-                  setProjects(rest); setCurrentId(rest[0].id); setHistory([]);
+                  ask(`Event "${project.name}" verwijderen?`, 'Verwijderen', () => {
+                    const rest = projects.filter((p) => p.id !== project.id);
+                    setProjects(rest); setCurrentId(rest[0].id); setHistory([]);
+                  }, { danger: true });
                 }}>Event verwijderen</button>
               )}
             </div>
@@ -471,6 +486,28 @@ export default function App() {
           {hover ? ` → ${hover}` : ''}
         </div>
       )}
+      {dialog && <DialogBox dialog={dialog} onClose={() => setDialog(null)} />}
+    </div>
+  );
+}
+
+function DialogBox({ dialog, onClose }: { dialog: Dialog; onClose: () => void }) {
+  const [value, setValue] = useState(dialog.input ?? '');
+  const ok = () => {
+    onClose();
+    dialog.onOk(value);
+  };
+  return (
+    <div className="backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <form className="dialog" role="dialog" aria-modal="true" onSubmit={(e) => { e.preventDefault(); ok(); }}>
+        <p>{dialog.text}</p>
+        {dialog.input !== undefined && <input id="dialog-input" autoFocus value={value} onChange={(e) => setValue(e.target.value)} />}
+        <div className="row">
+          <span className="spacer" />
+          <button type="button" onClick={onClose}>Annuleren</button>
+          <button type="submit" className={dialog.danger ? 'danger' : 'primary'} autoFocus={dialog.input === undefined}>{dialog.okLabel}</button>
+        </div>
+      </form>
     </div>
   );
 }
